@@ -48,7 +48,7 @@ func New(name string) (*Cache, error) {
 		return nil, fmt.Errorf("couldn't locate cache dir: %w", err)
 	}
 	root := filepath.Join(cacheDir, name)
-	err = os.Mkdir(root, 0700)
+	err = os.MkdirAll(root, 0700)
 	if err != nil && !os.IsExist(err) {
 		return nil, fmt.Errorf("couldn't create cache dir: %w", err)
 	}
@@ -73,14 +73,14 @@ func (c *Cache) Commit(tx Transaction) (string, error) {
 	}
 
 	// First, store the old link if any, so we can remove its target.
-	oldDest, err := os.Readlink(dest)
+	oldDest, err := Readlink(dest)
 	if err != nil && !os.IsNotExist(err) {
 		return "", fmt.Errorf("failed to read link: %w", err)
 	}
 
 	// Next create a temporary symlink pointing to the new destination.
 	tmpSymlink := fmt.Sprintf("%s.%x", dest, clock.Now().UnixNano())
-	err = os.Symlink(path, tmpSymlink)
+	err = Symlink(path, tmpSymlink)
 	if err != nil {
 		return "", fmt.Errorf("failed to finalise symlink: %w", err)
 	}
@@ -109,7 +109,7 @@ func (c *Cache) Rollback(tx Transaction) error {
 //
 // It will Rollback on error, however Commit must be called manually.
 //
-//     defer cache.RollbackOnError(tx, &err)
+//	defer cache.RollbackOnError(tx, &err)
 func (c *Cache) RollbackOnError(tx Transaction, err *error) {
 	if *err != nil {
 		rberr := c.Rollback(tx)
@@ -123,7 +123,7 @@ func (c *Cache) RollbackOnError(tx Transaction, err *error) {
 //
 // It will Rollback on error or otherwise Commit.
 //
-//     defer cache.RollbackOrCommit(tx, &err)
+//	defer cache.RollbackOrCommit(tx, &err)
 func (c *Cache) RollbackOrCommit(tx Transaction, err *error) {
 	if *err == nil {
 		_, *err = c.Commit(tx)
@@ -140,8 +140,8 @@ func (c *Cache) RollbackOrCommit(tx Transaction, err *error) {
 // Commit() must be called with the returned Transaction to atomically
 // add the created directory to the Cache.
 //
-//     tx, dir, err := cache.Mkdir("my-key")
-//     err = cache.Commit(tx)
+//	tx, dir, err := cache.Mkdir("my-key")
+//	err = cache.Commit(tx)
 func (c *Cache) Mkdir(key string) (Transaction, string, error) {
 	path, err := c.pathForKey(key)
 	if err != nil {
@@ -159,9 +159,9 @@ func (c *Cache) Mkdir(key string) (Transaction, string, error) {
 // Commit() must be called with the returned Transaction to atomically
 // add the created file to the Cache.
 //
-//     tx, f, err := cache.Create("my-key")
-//     err = f.Close()
-//     err = cache.Commit(tx)
+//	tx, f, err := cache.Create("my-key")
+//	err = f.Close()
+//	err = cache.Commit(tx)
 func (c *Cache) Create(key string) (Transaction, *os.File, error) {
 	path, err := c.pathForKey(key)
 	if err != nil {
@@ -209,7 +209,7 @@ func (c *Cache) Remove(key string) error {
 	path := filepath.Join(c.root, key[:2], key)
 
 	// First, store the old link if any, so we can remove its target.
-	oldDest, err := os.Readlink(path)
+	oldDest, err := Readlink(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to read entry: %w", err)
 	}
@@ -239,21 +239,30 @@ func (c *Cache) IfExists(key string) string {
 // Open a file or directory in the Cache.
 func (c *Cache) Open(key string) (*os.File, error) {
 	key = hash(key, false)
-	return os.Open(filepath.Join(c.root, key[:2], key))
+	path := filepath.Join(c.root, key[:2], key)
+	entry, err := Readlink(path)
+	if err != nil {
+		return nil, err
+	}
+	return os.Open(entry)
 }
 
 // ReadFile identified by key.
 func (c *Cache) ReadFile(key string) ([]byte, error) {
 	key = hash(key, false)
 	path := filepath.Join(c.root, key[:2], key)
-	return ioutil.ReadFile(path)
+	entry, err := Readlink(path)
+	if err != nil {
+		return nil, err
+	}
+	return ioutil.ReadFile(entry)
 }
 
 // Purge entry for given key if older than given age.
 func (c *Cache) PurgeKey(key string, older time.Duration) error {
 	key = hash(key, false)
 	path := filepath.Join(c.root, key[:2], key)
-	entry, err := os.Readlink(path)
+	entry, err := Readlink(path)
 	if err != nil && os.IsNotExist(err) {
 		return nil // no entry to be purged
 	}
