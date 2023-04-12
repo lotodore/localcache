@@ -3,7 +3,6 @@ package localcache
 import (
 	"crypto/sha256"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -240,22 +239,14 @@ func (c *Cache) IfExists(key string) string {
 func (c *Cache) Open(key string) (*os.File, error) {
 	key = hash(key, false)
 	path := filepath.Join(c.root, key[:2], key)
-	entry, err := Readlink(path)
-	if err != nil {
-		return nil, err
-	}
-	return os.Open(entry)
+	return Openlink(path)
 }
 
 // ReadFile identified by key.
 func (c *Cache) ReadFile(key string) ([]byte, error) {
 	key = hash(key, false)
 	path := filepath.Join(c.root, key[:2], key)
-	entry, err := Readlink(path)
-	if err != nil {
-		return nil, err
-	}
-	return ioutil.ReadFile(entry)
+	return ReadlinkFile(path)
 }
 
 // Purge entry for given key if older than given age.

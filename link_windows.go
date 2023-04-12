@@ -17,3 +17,19 @@ func Readlink(name string) (string, error) {
 func Symlink(oldname, newname string) error {
 	return os.WriteFile(newname, []byte(oldname), 0644)
 }
+
+func Openlink(name string) (*os.File, error) {
+	entry, err := Readlink(name)
+	if err != nil {
+		return nil, err
+	}
+	return os.Open(entry)
+}
+
+func ReadlinkFile(name string) ([]byte, error) {
+	entry, err := Readlink(name)
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadFile(entry)
+}
